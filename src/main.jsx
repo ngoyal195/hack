@@ -204,7 +204,7 @@ function App() {
         <div className="sidebar-bottom">
           <div className="trust-card">
             <ShieldCheck size={18}/>
-            <div><strong>Your data stays local</strong><span>No bank login. Demo data lives in this browser.</span></div>
+            <div><strong>Your data stays local</strong><span>No bank login. Your uploaded data stays in this browser.</span></div>
           </div>
           <button className="settings"><Settings size={17}/> Settings</button>
         </div>
@@ -383,36 +383,29 @@ function formatDate(s) {
   const d = new Date(s+"T12:00:00");
   return d.toLocaleDateString("en-IN",{day:"numeric",month:"short"});
 }
-function normalizeDate(v) {
-  if (!v) return "";
-  const d = new Date(v);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toISOString().slice(0,10);
-}
-function normalizeMerchant(raw) {
-  const s=String(raw).toUpperCase();
-  if (/NETFLIX/.test(s)) return "Netflix";
-  if (/SPOTIFY/.test(s)) return "Spotify";
-  if (/HOTSTAR|DISNEY/.test(s)) return "Hotstar";
-  if (/SWIGGY/.test(s)) return /ONE/.test(s) ? "Swiggy One" : "Swiggy";
-  if (/BAJAJ|PHONE.*EMI|EMI/.test(s)) return "Phone EMI";
-  if (/MIRAE|SIP/.test(s)) return "Mirae Asset SIP";
-  if (/RENT/.test(s)) return "Rent";
-  if (/SALARY/.test(s)) return "Salary";
-  return String(raw).split("/")[0].replace(/[-_]/g," ").trim().slice(0,40) || "Unknown merchant";
-}
-function guessCategory(raw) {
-  const s=String(raw).toLowerCase();
-  if (/netflix|spotify|hotstar|prime/.test(s)) return "Entertainment";
-  if (/swiggy|zomato|restaurant|food/.test(s)) return "Food";
-  if (/emi|bajaj/.test(s)) return "EMI";
-  if (/sip|mutual|investment/.test(s)) return "Investments";
-  if (/rent|housing/.test(s)) return "Housing";
-  if (/salary|payroll/.test(s)) return "Income";
-  return "Other";
-}
 function groupByDate(items) {
   return items.reduce((a,x)=>{(a[x.date]??=[]).push(x);return a},{});
 }
 
-createRoot(document.getElementById("root")).render(<App />);
+class AppErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+  render() {
+    if (this.state.error) {
+      return <div style={{fontFamily:"system-ui",padding:40,maxWidth:800,margin:"40px auto"}}>
+        <h1>CommitWise could not start</h1>
+        <p>The app hit a startup error. Your uploaded files are not the cause; this is a browser/runtime error.</p>
+        <pre style={{whiteSpace:"pre-wrap",background:"#f5f5f5",padding:16,borderRadius:12}}>{String(this.state.error?.stack || this.state.error)}</pre>
+        <button onClick={() => location.reload()} style={{padding:"10px 16px",borderRadius:8,border:0}}>Reload</button>
+      </div>;
+    }
+    return this.props.children;
+  }
+}
+
+createRoot(document.getElementById("root")).render(<AppErrorBoundary><App /></AppErrorBoundary>);
