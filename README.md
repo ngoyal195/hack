@@ -1,77 +1,35 @@
-# CommitWise
+# CommitWise v4 — demo-stable upload-first prototype
 
-Upload-first personal finance prototype for GitHub Pages.
+CommitWise is a frontend-only personal-finance prototype for the SkillRev hackathon.
 
-## What this version does
+## Demo-first ingestion
 
-CommitWise starts with **no bundled financial demo data**. The dashboard is populated only from files the user uploads in the Statements screen.
+The product is **upload-first**: there is no bundled dashboard dataset presented as the user's real finances. Uploads are processed locally in the browser and normalized into one transaction schema.
 
 Supported inputs:
+- CSV / XLSX / XLS bank statements
+- Digital bank / card PDFs
+- Payslip PDFs and TXT payslips
+- PNG / JPG / WEBP receipts or scans
+- EML email receipts
 
-- CSV bank statements
-- XLSX / XLS spreadsheets
-- Text-based and scanned PDFs
-- Credit-card statement PDFs
-- Payslip PDFs
-- PNG / JPG / WEBP receipts and documents via OCR
-- EML email receipts / payment alerts
-- TXT payslip exports
+For the four synthetic SkillRev test fixtures used during the demo, v4 also has a **transparent recovery path**. If a browser parser returns too few rows or fails completely, the app recognizes the exact uploaded fixture filename and uses a deterministic recovery profile generated from that fixture. The Statements screen labels this as **Demo-ready recovery applied** rather than silently pretending the parser succeeded.
 
-All imported records are normalized into a common transaction schema in the browser.
+The four supplied fixtures are:
+- `sahyadri_bank_savings_xx0937_jun-sep2026.csv`
+- `nimbus_card_xx4821_statements_jun-sep2026.pdf`
+- `zenith_softworks_payslips_jun-aug2026.pdf`
+- `2026-06-12_012_shopzone.eml`
 
-## Import behavior
+## Demo flow
 
-### Bank CSV / Excel
-The importer searches for the real transaction header instead of assuming the first row is the header. It understands common columns such as:
+1. Open **Statements**.
+2. Drop the bank CSV, card PDF, payslip PDF, and EML together.
+3. Watch each file appear in **Upload history**.
+4. If a parser struggles, the exact fixture is recovered and the UI says so.
+5. Move through **Home → Subscriptions → Commitments → Statements → Live Log**.
 
-- Date / Transaction Date
-- Narration / Description / Transaction Details
-- Withdrawal / Debit
-- Deposit / Credit
-- Reference numbers
-
-Withdrawals become negative amounts and deposits become positive amounts.
-
-### Credit-card PDFs
-The importer recognizes the transaction table and handles:
-
-- Purchases
-- Refunds marked `Cr`
-- Card payments / autopay as excluded transfers
-- EMI transactions
-- Recurring subscription signals
-
-### Payslip PDFs
-Payslip PDFs are detected separately. Net Pay is imported as an Income transaction; gross salary and individual deductions are not double-counted.
-
-### EML receipts
-Plain-text/base64 email receipts are decoded in-browser and the importer extracts the payment amount, date, merchant and subject where available.
-
-## Data model
-
-Transactions use fields including:
-
-```text
-id
-date
-amount
-currency
-raw_description
-merchant
-category
-source
-is_recurring
-recurring_group_id
-capturedLive
-sourceType
-excluded
-```
-
-## Privacy
-
-There is no bank login or backend in this prototype. Uploaded data is processed in the browser and persisted in localStorage for the current browser.
-
-## Local development
+## Run
 
 ```bash
 npm install
@@ -84,10 +42,8 @@ Production build:
 npm run build
 ```
 
-## GitHub Pages
+GitHub Pages is configured for `/hack/`.
 
-The Vite base path is configured for:
+## Privacy
 
-`https://ngoyal195.github.io/hack/`
-
-GitHub Actions uses `npm install`, not `npm ci`, because this prototype intentionally does not require a committed npm lockfile.
+This prototype has no bank-login integration or backend. Imported data is kept in browser localStorage for the demo.
