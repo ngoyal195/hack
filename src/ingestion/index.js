@@ -1,4 +1,4 @@
-export const SUPPORTED_EXTENSIONS = ["csv", "xlsx", "xls", "pdf", "png", "jpg", "jpeg", "webp", "txt"];
+export const SUPPORTED_EXTENSIONS = ["csv", "xlsx", "xls", "pdf", "png", "jpg", "jpeg", "webp", "txt", "eml"];
 
 export function fileKind(file) {
   const ext = file?.name?.split(".").pop()?.toLowerCase();
@@ -7,69 +7,42 @@ export function fileKind(file) {
   if (ext === "pdf") return "pdf";
   if (["png", "jpg", "jpeg", "webp"].includes(ext)) return "image";
   if (ext === "txt") return "text";
+  if (ext === "eml") return "eml";
   return "unsupported";
 }
 
 export async function ingestFile(file, options = {}) {
   const kind = fileKind(file);
-
   if (kind === "unsupported") {
-    return {
-      transactions: [],
-      warnings: [],
-      errors: [`Unsupported file type: .${file?.name?.split(".").pop() || "unknown"}`],
-      metadata: {}
-    };
+    return { transactions: [], warnings: [], errors: [`Unsupported file type: .${file?.name?.split(".").pop() || "unknown"}`], metadata: {} };
   }
-
-  if (kind === "csv") {
-    const { parseCsvFile } = await import("./csv.js");
-    return parseCsvFile(file);
-  }
-
-  if (kind === "spreadsheet") {
-    const { parseSpreadsheetFile } = await import("./xlsx.js");
-    return parseSpreadsheetFile(file);
-  }
-
-  if (kind === "pdf") {
-    const { parsePdfFile } = await import("./pdf.js");
-    return parsePdfFile(file, options.onProgress);
-  }
-
-  if (kind === "image") {
-    const { parseImageFile } = await import("./ocr.js");
-    return parseImageFile(file, options.onProgress);
-  }
-
+  if (kind === "csv") return (await import("./csv.js")).parseCsvFile(file);
+  if (kind === "spreadsheet") return (await import("./xlsx.js")).parseSpreadsheetFile(file);
+  if (kind === "pdf") return (await import("./pdf.js")).parsePdfFile(file, options.onProgress);
+  if (kind === "image") return (await import("./ocr.js")).parseImageFile(file, options.onProgress);
+  if (kind === "eml") return (await import("./eml.js")).parseEmlFile(file);
   if (kind === "text") {
     const { parsePayslipText } = await import("./payslip.js");
     const { makeImportResult } = await import("./schema.js");
-    const text = await file.text();
-    const payslip = parsePayslipText(text, file.name);
-    const transaction = payslip.netSalary
-      ? {
-          id: `payslip_${Date.now()}`,
-          date: payslip.payDate || new Date().toISOString().slice(0, 10),
-          amount: payslip.netSalary,
-          currency: "INR",
-          raw_description: `Salary · ${payslip.employer || "Employer"}`,
-          merchant: payslip.employer || "Salary",
-          category: "Income",
-          source: file.name,
-          is_recurring: true,
-          recurring_group_id: "rec_salary",
-          capturedLive: false,
-          confidence: payslip.confidence,
-          sourceType: "payslip"
-        }
-      : null;
-
+    const parsed = parsePayslipText(await file.text(), file.name);
     return makeImportResult({
-      transactions: transaction ? [transaction] : [],
-      warnings: transaction ? [] : ["No net salary was detected in this text file."],
-      errors: [],
-      metadata: { format: "Payslip text", payslip }
+      transactions: parsed.netSalary ? [{
+        id: `payslip_${Date.now()}`,
+        date: parsed.payDate || new Date().toISOString().slice(0, 10),
+        amount: parsed.netSalary,
+        currency: "INR",
+        raw_description: `Salary · ${parsed.employer}`,
+        merchant: parsed.employer,
+        category: "Income",
+        source: file.name,
+        is_recurring: true,
+        recurring_group_id: "rec_salary",
+        capturedLive: false,
+        confidence: parsed.confidence,
+        sourceType: "payslip"
+      }] : [],
+      warnings: parsed.netSalary ? [] : ["No net salary was detected in this text file."],
+      metadata: { format: "Payslip text", payslip: parsed }
     });
   }
 }
