@@ -1,7 +1,7 @@
 {
   "name": "commitwise",
   "private": true,
-  "version": "1.0.0",
+  "version": "2.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,8 +11,11 @@
   "dependencies": {
     "lucide-react": "^0.468.0",
     "papaparse": "^5.5.3",
+    "pdfjs-dist": "^5.4.149",
     "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react-dom": "^19.1.1",
+    "tesseract.js": "^6.0.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
