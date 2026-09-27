@@ -40,7 +40,7 @@ const money = (n) =>
     maximumFractionDigits: 0
   }).format(Math.round(Number(n) || 0));
 
-const STORAGE_VERSION = "commitwise-upload-first-v3";
+const STORAGE_VERSION = "commitwise-upload-first-v4";
 
 function initializeStorage() {
   try {
@@ -120,7 +120,7 @@ function App() {
   useEffect(() => localStorage.setItem("cw_live", JSON.stringify(livePayments)), [livePayments]);
 
   const currentMonth = new Date().toISOString().slice(0, 7);
-  const spent = transactions.filter(t => t.date.startsWith(currentMonth) && t.amount < 0).reduce((s,t) => s + Math.abs(t.amount), 0);
+  const spent = transactions.filter(t => t.date.startsWith(currentMonth) && t.amount < 0 && !t.excluded && t.category !== "Transfer").reduce((s,t) => s + Math.abs(t.amount), 0);
   const income = transactions.filter(t => t.date.startsWith(currentMonth) && t.amount > 0).reduce((s,t) => s + t.amount, 0);
   const now = new Date();
   const horizon = new Date(now);
@@ -145,7 +145,7 @@ function App() {
     if (!file) return;
     const kind = fileKind(file);
     if (kind === "unsupported") {
-      alert("Unsupported file. Use CSV, XLSX/XLS, PDF, PNG, JPG, JPEG or WEBP.");
+      alert("Unsupported file. Use CSV, XLSX/XLS, PDF, PNG, JPG, JPEG, WEBP, TXT or EML.");
       return;
     }
     try {
@@ -157,14 +157,12 @@ function App() {
         return;
       }
       if (result.transactions?.length) {
-        setTransactions(old => {
-          const merged = reconcileAndDetect([...result.transactions, ...old], livePayments);
-          const detectedSubscriptions = buildSubscriptions(merged);
-          const detectedCommitments = buildCommitments(merged, detectedSubscriptions);
-          setSubscriptions(detectedSubscriptions);
-          setCommitments(detectedCommitments);
-          return merged;
-        });
+        const merged = await reconcileAndDetect([...result.transactions, ...transactions], livePayments);
+        setTransactions(merged);
+        const detectedSubscriptions = buildSubscriptions(merged);
+        const detectedCommitments = buildCommitments(merged, detectedSubscriptions);
+        setSubscriptions(detectedSubscriptions);
+        setCommitments(detectedCommitments);
         setImportSummary({ file: file.name, kind, count: result.transactions.length, warnings: result.warnings || [], metadata: result.metadata || {} });
         setPage("statements");
       } else {
@@ -354,9 +352,9 @@ function StatementsPage({transactions,onImport,importProgress,importSummary}) {
   const fileInput=React.useRef();
   const filtered=transactions.filter(t=>(t.merchant+" "+t.raw_description).toLowerCase().includes(search.toLowerCase()));
   const uncaptured=transactions.filter(t=>t.amount<0&&!t.capturedLive);
-  const accepted=".csv,.xlsx,.xls,.pdf,.png,.jpg,.jpeg,.webp,.txt";
+  const accepted=".csv,.xlsx,.xls,.pdf,.png,.jpg,.jpeg,.webp,.txt,.eml";
   const fileTypes=[
-    ["CSV","Bank statement exports"],["XLSX / XLS","Excel statements"],["PDF","Digital bank statements"],["PNG / JPG / WEBP","Receipts & scanned documents"],["TXT","Payslip text exports"]
+    ["CSV","Bank statement exports"],["XLSX / XLS","Excel statements"],["PDF","Digital bank statements"],["PNG / JPG / WEBP","Receipts & scanned documents"],["TXT","Payslip text exports"],["EML","Email receipts / alerts"]
   ];
   return <div>
     <PageHeader eyebrow="STATEMENTS & INGESTION" title="Bring in the messy stuff." description="CommitWise now turns common statement, spreadsheet, PDF and receipt files into the same transaction schema."/>
@@ -364,7 +362,7 @@ function StatementsPage({transactions,onImport,importProgress,importSummary}) {
       <input ref={fileInput} type="file" accept={accepted} multiple hidden onChange={e=>[...e.target.files].forEach(onImport)}/>
       <div className="upload-icon"><Upload/></div>
       <h3>{importProgress!==null?`Reading file… ${importProgress}%`:"Drop one or more statements or receipts here"}</h3>
-      <p>CSV · Excel · PDF · PNG · JPG · WEBP · all processed locally in the browser</p>
+      <p>CSV · Excel · PDF · PNG · JPG · WEBP · TXT · EML · all processed locally in the browser</p>
       <button className="outline-button" type="button">Choose file</button>
     </div>
     <div className="ingestion-types">{fileTypes.map(([name,text])=><div key={name}><strong>{name}</strong><span>{text}</span></div>)}</div>
