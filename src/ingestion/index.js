@@ -48,6 +48,6 @@ export async function ingestFile(file, options = {}) {
 }
 
 export async function reconcileAndDetect(transactions, livePayments) {
-  const { reconcileAndDetect: fn } = await import("./intelligence.js");
-  return fn(transactions, livePayments);
+  const { reconcileAndDetect: fn, dedupeTransactions } = await import("./intelligence.js");
+  return dedupeTransactions(await fn(transactions, livePayments));
 }
