@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { ingestFile, fileKind, reconcileAndDetect } from "./ingestion";
 import { fixtureForFile } from "./ingestion/demoFixtures.js";
+import demoTransactions from "../sample-data/demo-transactions.json";
 import {
   ArrowDownToLine,
   ArrowUpRight,
@@ -42,7 +43,6 @@ const money = (n) =>
   }).format(Math.round(Number(n) || 0));
 
 const STORAGE_VERSION = "commitwise-sample-demo-v5";
-const DEMO_DATA_URL = `${import.meta.env.BASE_URL}sample-data/demo-transactions.json`;
 
 function initializeStorage() {
   try {
@@ -129,9 +129,10 @@ function App() {
   async function loadDemoData() {
     try {
       setImportProgress(20);
-      const response = await fetch(DEMO_DATA_URL, { cache: "no-store" });
-      if (!response.ok) throw new Error(`Sample data could not be loaded (${response.status})`);
-      const sample = await response.json();
+      // Import the bundled JSON directly. This avoids GitHub Pages/base-path
+      // and fetch timing problems while keeping the source file in sample-data/.
+      const sample = Array.isArray(demoTransactions) ? demoTransactions : [];
+      if (!sample.length) throw new Error("The bundled sample-data/demo-transactions.json is empty.");
       const normalized = sample.map((t, i) => ({ ...t, id: `sample_${i}_${t.id}` }));
       const merged = await reconcileAndDetect(normalized, livePayments);
       setTransactions(merged);
@@ -142,7 +143,7 @@ function App() {
       setDemoMode(true);
       setImportSummary({ file: "sample-data/demo-transactions.json", kind: "sample", count: merged.length, status: "demo", warnings: ["Demo dataset loaded from the bundled sample-data folder. You can still upload your own files at any time."], metadata: { demo: true } });
       setImportHistory(h => [{ file:"sample-data/demo-transactions.json", kind:"sample", count:merged.length, status:"demo", at:new Date().toISOString() }, ...h.filter(x => x.kind !== "sample")].slice(0,10));
-      setPage("statements");
+      setPage("home");
     } catch (error) {
       setImportSummary({ file: "sample-data/demo-transactions.json", kind: "sample", count: 0, status: "error", warnings: [error.message], metadata: {} });
     } finally {
