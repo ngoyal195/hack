@@ -41,7 +41,8 @@ const money = (n) =>
     maximumFractionDigits: 0
   }).format(Math.round(Number(n) || 0));
 
-const STORAGE_VERSION = "commitwise-upload-first-v4";
+const STORAGE_VERSION = "commitwise-sample-demo-v5";
+const DEMO_DATA_URL = `${import.meta.env.BASE_URL}sample-data/demo-transactions.json`;
 
 function initializeStorage() {
   try {
@@ -115,6 +116,7 @@ function App() {
   const [importProgress, setImportProgress] = useState(null);
   const [importSummary, setImportSummary] = useState(null);
   const [importHistory, setImportHistory] = useState(() => load("cw_import_history", []));
+  const [demoMode, setDemoMode] = useState(() => localStorage.getItem("cw_demo_mode") === "1");
   const importQueue = React.useRef(Promise.resolve());
 
   useEffect(() => localStorage.setItem("cw_transactions", JSON.stringify(transactions)), [transactions]);
@@ -122,6 +124,37 @@ function App() {
   useEffect(() => localStorage.setItem("cw_commitments", JSON.stringify(commitments)), [commitments]);
   useEffect(() => localStorage.setItem("cw_live", JSON.stringify(livePayments)), [livePayments]);
   useEffect(() => localStorage.setItem("cw_import_history", JSON.stringify(importHistory)), [importHistory]);
+  useEffect(() => localStorage.setItem("cw_demo_mode", demoMode ? "1" : "0"), [demoMode]);
+
+  async function loadDemoData() {
+    try {
+      setImportProgress(20);
+      const response = await fetch(DEMO_DATA_URL, { cache: "no-store" });
+      if (!response.ok) throw new Error(`Sample data could not be loaded (${response.status})`);
+      const sample = await response.json();
+      const normalized = sample.map((t, i) => ({ ...t, id: `sample_${i}_${t.id}` }));
+      const merged = await reconcileAndDetect(normalized, livePayments);
+      setTransactions(merged);
+      setDemoMode(false);
+      const detectedSubscriptions = buildSubscriptions(merged);
+      setSubscriptions(detectedSubscriptions);
+      setCommitments(buildCommitments(merged, detectedSubscriptions));
+      setDemoMode(true);
+      setImportSummary({ file: "sample-data/demo-transactions.json", kind: "sample", count: merged.length, status: "demo", warnings: ["Demo dataset loaded from the bundled sample-data folder. You can still upload your own files at any time."], metadata: { demo: true } });
+      setImportHistory(h => [{ file:"sample-data/demo-transactions.json", kind:"sample", count:merged.length, status:"demo", at:new Date().toISOString() }, ...h.filter(x => x.kind !== "sample")].slice(0,10));
+      setPage("statements");
+    } catch (error) {
+      setImportSummary({ file: "sample-data/demo-transactions.json", kind: "sample", count: 0, status: "error", warnings: [error.message], metadata: {} });
+    } finally {
+      setImportProgress(null);
+    }
+  }
+
+  useEffect(() => {
+    if (!transactions.length) loadDemoData();
+    // Demo data is intentionally auto-loaded only for an empty first-run workspace.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const currentMonth = new Date().toISOString().slice(0, 7);
   const spent = transactions.filter(t => t.date.startsWith(currentMonth) && t.amount < 0 && !t.excluded && t.category !== "Transfer").reduce((s,t) => s + Math.abs(t.amount), 0);
@@ -173,6 +206,7 @@ function App() {
       }
       const merged = await reconcileAndDetect([...transactionsFound, ...transactions], livePayments);
       setTransactions(merged);
+      setDemoMode(false);
       const detectedSubscriptions = buildSubscriptions(merged);
       const detectedCommitments = buildCommitments(merged, detectedSubscriptions);
       setSubscriptions(detectedSubscriptions);
@@ -187,6 +221,7 @@ function App() {
       if (fixture) {
         const recovered = await reconcileAndDetect([...fixture.transactions.map(t => ({ ...t, id: `${t.id}_${Date.now()}` })), ...transactions], livePayments);
         setTransactions(recovered);
+        setDemoMode(false);
         const detectedSubscriptions = buildSubscriptions(recovered);
         setSubscriptions(detectedSubscriptions);
         setCommitments(buildCommitments(recovered, detectedSubscriptions));
@@ -253,7 +288,7 @@ function App() {
           {page === "live" && <LivePage livePayments={livePayments} addLivePayment={addLivePayment}/>}
           {page === "commitments" && <CommitmentsPage commitments={commitments} subscriptions={subscriptions} />}
           {page === "subscriptions" && <SubscriptionsPage subscriptions={subscriptions} setSubscriptions={setSubscriptions}/>}
-          {page === "statements" && <StatementsPage transactions={transactions} onImport={importFile} importProgress={importProgress} importSummary={importSummary} importHistory={importHistory}/>}
+          {page === "statements" && <StatementsPage transactions={transactions} onImport={importFile} onLoadDemo={loadDemoData} importProgress={importProgress} importSummary={importSummary} importHistory={importHistory} demoMode={demoMode}/>}
         </div>
       </main>
     </div>
@@ -377,7 +412,7 @@ function SubscriptionsPage({subscriptions,setSubscriptions}) {
   </div>;
 }
 
-function StatementsPage({transactions,onImport,importProgress,importSummary,importHistory}) {
+function StatementsPage({transactions,onImport,onLoadDemo,importProgress,importSummary,importHistory,demoMode}) {
   const [drag,setDrag]=useState(false);
   const [search,setSearch]=useState("");
   const fileInput=React.useRef();
@@ -388,7 +423,8 @@ function StatementsPage({transactions,onImport,importProgress,importSummary,impo
     ["CSV","Bank statement exports"],["XLSX / XLS","Excel statements"],["PDF","Digital bank statements"],["PNG / JPG / WEBP","Receipts & scanned documents"],["TXT","Payslip text exports"],["EML","Email receipts / alerts"]
   ];
   return <div>
-    <PageHeader eyebrow="STATEMENTS & INGESTION" title="Bring in the messy stuff." description="CommitWise now turns common statement, spreadsheet, PDF and receipt files into the same transaction schema."/>
+    <PageHeader eyebrow="STATEMENTS & INGESTION" title="Bring in the messy stuff." description="CommitWise turns common statement, spreadsheet, PDF and receipt files into the same transaction schema." action={<button className="outline-button" onClick={onLoadDemo}><Sparkles size={16}/> Load demo data</button>}/>
+    {demoMode&&<div className="demo-banner"><div><Sparkles size={18}/><div><strong>Demo Data is loaded</strong><span>Using the bundled synthetic fixtures in <code>sample-data/</code>. Upload your own files to switch back to live ingestion.</span></div></div><button className="outline-button small" onClick={onLoadDemo}>Reload demo</button></div>}
     <div className={`dropzone ${drag?"drag":""}`} onDragOver={e=>{e.preventDefault();setDrag(true)}} onDragLeave={()=>setDrag(false)} onDrop={e=>{e.preventDefault();setDrag(false);const files=[...e.dataTransfer.files];files.forEach(onImport)}} onClick={()=>fileInput.current?.click()}>
       <input ref={fileInput} type="file" accept={accepted} multiple hidden onChange={e=>[...e.target.files].forEach(onImport)}/>
       <div className="upload-icon"><Upload/></div>
@@ -398,7 +434,7 @@ function StatementsPage({transactions,onImport,importProgress,importSummary,impo
     </div>
     <div className="ingestion-types">{fileTypes.map(([name,text])=><div key={name}><strong>{name}</strong><span>{text}</span></div>)}</div>
     {importSummary&&<div className="panel import-result"><div><strong>{importSummary.file}</strong><span>{importSummary.count} transaction{importSummary.count===1?"":"s"} normalised · {importSummary.metadata?.format||importSummary.kind}</span></div><div>{importSummary.warnings?.length?<span className="pill amber">{importSummary.warnings.length} warning{importSummary.warnings.length===1?"":"s"}</span>:<span className="pill green">Parsed successfully</span>}</div></div>}
-    {importSummary&&<div className={`panel upload-status ${importSummary.status||""}`}><div className="status-icon">{importSummary.status==="error"?<X size={18}/>:importSummary.status==="warning"?<CircleHelp size={18}/>:<Check size={18}/>}</div><div className="status-copy"><strong>{importSummary.status==="recovered"?"Demo-ready recovery applied":importSummary.status==="success"?"File processed successfully":importSummary.status==="reading"?"Reading your file…":"File needs review"}</strong><span>{importSummary.warnings?.[0] || "Transactions are now available across the dashboard."}</span></div><div className="status-count">{importSummary.count}</div></div>}
+    {importSummary&&<div className={`panel upload-status ${importSummary.status||""}`}><div className="status-icon">{importSummary.status==="error"?<X size={18}/>:importSummary.status==="warning"?<CircleHelp size={18}/>:<Check size={18}/>}</div><div className="status-copy"><strong>{importSummary.status==="demo"?"Demo dataset loaded":importSummary.status==="recovered"?"Demo-ready recovery applied":importSummary.status==="success"?"File processed successfully":importSummary.status==="reading"?"Reading your file…":"File needs review"}</strong><span>{importSummary.warnings?.[0] || "Transactions are now available across the dashboard."}</span></div><div className="status-count">{importSummary.count}</div></div>}
     {importHistory?.length>0&&<div className="panel import-history"><div className="panel-heading"><div><h3>Upload history</h3><p>Every file you add is processed independently.</p></div><span className="pill green">Local only</span></div>{importHistory.slice(0,5).map((x,i)=><div className="history-row" key={x.file+x.at+i}><div><strong>{x.file}</strong><span>{x.count} records · {new Date(x.at).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}</span></div><span className={`pill ${x.status==="recovered"?"amber":x.status==="success"?"green":"red"}`}>{x.status}</span></div>)}</div>}
     <div className="reconcile-grid"><div className="panel"><div className="panel-heading"><div><h3>Reconciliation health</h3><p>How much of your statement is accounted for?</p></div><ShieldCheck size={20}/></div><div className="health-number">{Math.round((transactions.filter(t=>t.capturedLive).length/(transactions.length||1))*100)}<small>% captured live</small></div><div className="health-bars"><div><span>Normalised</span><b style={{width:`${Math.min(100,transactions.length?96:0)}%`}}/></div><div><span>Merchant matched</span><b style={{width:`${Math.min(100,transactions.length?91:0)}%`}}/></div><div><span>Recurring detected</span><b style={{width:`${Math.min(100,transactions.filter(t=>t.is_recurring).length/(transactions.length||1)*100)}%`}}/></div></div></div>
       <div className="panel flagged"><div className="panel-heading"><div><h3>Never captured live</h3><p>Potential missed context</p></div><span className="pill red">{uncaptured.length} flagged</span></div>{uncaptured.slice(0,5).map(t=><div className="flagged-row" key={t.id}><div><strong>{t.merchant}</strong><span>{formatDate(t.date)} · {t.category}</span></div><strong>{money(t.amount)}</strong></div>)}</div></div>
